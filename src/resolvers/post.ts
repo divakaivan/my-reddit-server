@@ -5,13 +5,14 @@ import { idText } from "typescript";
 
 @Resolver()
 export class PostResolver {
-  @Query(() => [Post])
+  @Query(() => [Post]) // type-gql return type
   posts(@Ctx() { em }: MyContext): Promise<Post[]> {
     return em.find(Post, {});
   }
 
-  @Query(() => Post, { nullable: true })
+  @Query(() => Post, { nullable: true }) // it can return a post or null (note the syntax)
   post(@Arg("id") id: number, @Ctx() { em }: MyContext): Promise<Post | null> {
+    // gql argument and its type (id)
     return em.findOne(Post, { id });
   }
 
