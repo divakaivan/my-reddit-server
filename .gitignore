@@ -2,3 +2,5 @@ node_modules
 package-lock.json
 *.env
 dist
+dist/index.js
+dist/index.js.map
