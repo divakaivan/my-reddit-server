@@ -4,3 +4,4 @@ package-lock.json
 dist
 dist/index.js
 dist/index.js.map
+env.ts
