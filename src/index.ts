@@ -53,7 +53,7 @@ const main = async () => {
     // give access to the db to the resolvers
   });
 
-  apolloServer.applyMiddleware({ app });
+  apolloServer.applyMiddleware({ app, cors: {origin: "http://localhost:3000"} });
 
   app.listen(4000, () => {
     console.log("SERVER STARTED ON http://localhost:4000/");
