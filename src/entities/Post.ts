@@ -1,22 +1,29 @@
-import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
-import { ObjectType, Field, Int } from "type-graphql";
+import { ObjectType, Field } from "type-graphql";
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  BaseEntity,
+} from "typeorm";
 
-@ObjectType() // this makes the class a graphql type, otherwise wont work when we pass it in post.ts as the returned value
+@ObjectType()
 @Entity()
-export class Post {
-  @Field(() => Int) // exposes the item to the gql schema
-  @PrimaryKey()
+export class Post extends BaseEntity {
+  @Field()
+  @PrimaryGeneratedColumn()
   id!: number;
 
   @Field(() => String)
-  @Property({ type: "date" })
-  createdAt = new Date();
+  @CreateDateColumn()
+  createdAt: Date;
 
   @Field(() => String)
-  @Property({ type: "date", onUpdate: () => new Date() })
-  updatedAt = new Date();
+  @UpdateDateColumn()
+  updatedAt: Date;
 
-  @Field(() => String)
-  @Property({ type: "text" })
+  @Field()
+  @Column()
   title!: string;
 }
