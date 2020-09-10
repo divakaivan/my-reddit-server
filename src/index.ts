@@ -14,18 +14,21 @@ import {createConnection} from "typeorm";
 import {Post} from "./entities/Post";
 import {User} from "./entities/User";
 import {REDIS_SECRET} from "../env";
+import path from "path"
 
 const main = async () => {
-    await createConnection({
+    const conn = await createConnection({
         type: "postgres",
         database: "my-reddit",
         username: "postgres",
         password: process.env.DB_PASS,
         logging: true,
         synchronize: true,
+        migrations: [path.join(__dirname, './migrations/*')],
         entities: [Post, User],
     });
-    // await conn.runMigrations();
+    await conn.runMigrations();
+    // await Post.delete({});
 
     const app = express();
 
