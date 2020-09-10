@@ -16,7 +16,7 @@ import {User} from "./entities/User";
 import {REDIS_SECRET} from "../env";
 
 const main = async () => {
-    const conn = await createConnection({
+    await createConnection({
         type: "postgres",
         database: "my-reddit",
         username: "postgres",
@@ -25,8 +25,7 @@ const main = async () => {
         synchronize: true,
         entities: [Post, User],
     });
-
-    await conn.runMigrations();
+    // await conn.runMigrations();
 
     const app = express();
 
