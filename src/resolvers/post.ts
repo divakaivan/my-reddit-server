@@ -49,27 +49,50 @@ export class PostResolver {
     ): Promise<PaginatedPosts> {
         const realLimit = Math.min(50, limit);
         const realLimitPlusOne = realLimit + 1; // +1 to check if there are more posts
-        const qb = getConnection()
-            .getRepository(Post)
-            .createQueryBuilder("p")
-            .innerJoinAndSelect(
-                "p.creator",
-                "u",
-                'u.id = p."creatorId"'
-            )
-            .orderBy('p."createdAt"', "DESC")
-            .take(realLimitPlusOne);
 
-        if (cursor) {
-            qb.where('p."createdAt" < :cursor', {
-                cursor: new Date(parseInt(cursor)),
-            });
-        }
+        const replacements: any[] = [realLimitPlusOne];
+
+        if (cursor) replacements.push(new Date(parseInt(cursor)));
+
+        // json_build_object lets reshape data into an object - which is what our gql expects for the creator
+        // because otherwise we get all the items on a top level
+        const posts = await getConnection().query(`
+            select p.*, 
+            json_build_object(
+                    'id', u.id,
+                    'username', u.username,
+                    'email', u.email,
+                    'createdAt', u."createdAt",
+                    'updatedAt', u."updatedAt"
+                ) creator
+            from post p
+            inner join public.user u on u.id = p."creatorId"
+            ${cursor ? `where p."createdAt" < $2` : ''}
+            order by p."createdAt" DESC
+            limit $1
+        `, replacements);
+
+        // const qb = getConnection()
+        //     .getRepository(Post)
+        //     .createQueryBuilder("p")
+        //     .innerJoinAndSelect(
+        //         "p.creator",
+        //         "u",
+        //         'u.id = p."creatorId"'
+        //     )
+        //     .orderBy('p."createdAt"', "DESC")
+        //     .take(realLimitPlusOne);
+
+        // if (cursor) {
+        //     qb.where('p."createdAt" < :cursor', {
+        //         cursor: new Date(parseInt(cursor)),
+        //     });
+        // }
 
         // for pagination: we try and get the amount of posts the user asked for plus 1.
         // we return the amount they asked for (with the slice below)
         // but we use the amount + 1 to check if there are more posts
-        const posts = await qb.getMany();
+        // const posts = await qb.getMany();
 
         return {posts: posts.slice(0, realLimit), hasMore: posts.length === realLimitPlusOne}
     }
