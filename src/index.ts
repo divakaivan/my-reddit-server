@@ -16,6 +16,7 @@ import {User} from "./entities/User";
 import {Updoot} from "./entities/Updoot";
 import {REDIS_SECRET} from "../env";
 import path from "path"
+import {createUserLoader} from "./utils/createUserLoader";
 
 const main = async () => {
     const conn = await createConnection({
@@ -65,7 +66,8 @@ const main = async () => {
             resolvers: [HelloResolver, PostResolver, UserResolver],
             validate: false,
         }),
-        context: ({req, res}) => ({req, res, redis}),
+        // adding the createUserLoader batches and caches the loading of users within a single request
+        context: ({req, res}) => ({req, res, redis, userLoader: createUserLoader()}),
     });
 
     apolloServer.applyMiddleware({
