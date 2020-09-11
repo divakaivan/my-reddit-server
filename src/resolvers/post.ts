@@ -42,6 +42,40 @@ export class PostResolver {
         return root.text.slice(0, 50)
     }
 
+    @Mutation(()=>Boolean)
+    @UseMiddleware(isAuth)
+    async vote(
+        @Arg('postId', ()=>Int) postId: number,
+        @Arg('value', ()=>Int) value: number,
+        @Ctx() {req}:MyContext
+    ) {
+        const isUpdoot = value !== -1;
+        const realValue = isUpdoot ? 1 : -1;
+        const {userId} = req.session;
+        // await Updoot.insert({
+        //     userId,
+        //     postId,
+        //     value: realValue
+        // }); // added to the raw sql so that if one of the two fails, all fails
+
+        // sometimes you can write your own sql
+        await getConnection().query(`
+            START TRANSACTION;
+            
+            insert into updoot ("userId", "postId", value)
+            values (${userId}, ${postId}, ${realValue});
+            
+            update post
+            set points = points + ${realValue}
+            where id = ${postId};
+            
+            COMMIT;
+        `); // add params directly because they are integers
+        // doing it like this does not convert the sql to a prepared statement
+
+        return true
+    }
+
     @Query(() => PaginatedPosts)
     async posts(
         @Arg("limit", () => Int) limit: number,
