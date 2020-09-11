@@ -52,6 +52,7 @@ export class PostResolver {
         return userLoader.load(post.creatorId);
     }
 
+    // these field resolvers only run if the fields are requested by the query. (optimisation)
     @FieldResolver(()=>Int, {nullable: true})
     async voteStatus(
         @Root() post: Post,
