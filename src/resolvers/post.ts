@@ -52,7 +52,17 @@ export class PostResolver {
         return userLoader.load(post.creatorId);
     }
 
+    @FieldResolver(()=>Int, {nullable: true})
+    async voteStatus(
+        @Root() post: Post,
+        @Ctx() {updootLoader, req}: MyContext
+    ) {
+        if (!req.session.userId) return null;
+        const updoot = await updootLoader.load({postId: post.id, userId: req.session.userId});
 
+        // if we cant find a value, then the user didnt vote on the post, otherwise give the value
+        return updoot ? updoot.value : null
+    }
 
     @Mutation(()=>Boolean)
     @UseMiddleware(isAuth)
@@ -115,32 +125,23 @@ export class PostResolver {
     @Query(() => PaginatedPosts)
     async posts(
         @Arg("limit", () => Int) limit: number,
-        @Arg("cursor", () => String, {nullable: true}) cursor: string | null,
-        @Ctx() {req} : MyContext
+        @Arg("cursor", () => String, {nullable: true}) cursor: string | null
     ): Promise<PaginatedPosts> {
         const realLimit = Math.min(50, limit);
         const realLimitPlusOne = realLimit + 1; // +1 to check if there are more posts
 
         const replacements: any[] = [realLimitPlusOne];
 
-        if (req.session.userId) replacements.push(req.session.userId);
-
-        let cursorIdx = 3;
         if (cursor) {
             replacements.push(new Date(parseInt(cursor)));
-            cursorIdx = replacements.length;
-        };
+        }
 
         // json_build_object lets reshape data into an object - which is what our gql expects for the creator
         // because otherwise we get all the items on a top level (check previous commits to see logic)
         const posts = await getConnection().query(`
-            select p.*, 
-
-                ${req.session.userId 
-                    ? '(select value from updoot where "userId" = $2 and "postId" = p.id) "voteStatus"' 
-                    : 'null as "voteStatus"'}
+            select p.*
             from post p
-            ${cursor ? `where p."createdAt" < $${cursorIdx}` : ''}
+            ${cursor ? `where p."createdAt" < $2` : ''}
             order by p."createdAt" DESC
             limit $1
         `, replacements);
