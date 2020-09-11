@@ -15,6 +15,7 @@ import {Post} from "../entities/Post";
 import {MyContext} from "../types";
 import {isAuth} from "../middleware/isAuth";
 import {getConnection} from "typeorm";
+import {Updoot} from "../entities/Updoot";
 
 @InputType()
 class PostInput {
@@ -52,25 +53,49 @@ export class PostResolver {
         const isUpdoot = value !== -1;
         const realValue = isUpdoot ? 1 : -1;
         const {userId} = req.session;
+        const updoot = await Updoot.findOne({where: {postId, userId}});
+
+        // the user has voted on the post before
+        // and they are changing their vote
+        if (updoot && updoot.value !== realValue) {
+            await getConnection().transaction(async (tm) => {
+                await tm.query(`
+                    update updoot
+                    set value = $1
+                    where "postId" = $2 and "userId" = $3
+                    `,[realValue, postId, userId]
+                );
+
+                await tm.query(`
+                      update post
+                      set points = points + $1
+                      where id = $2
+                    `,[2 * realValue, postId]
+                );
+            });
+        } else if (!updoot) {
+            // has never voted before
+            // typeorm will handle opening and closing the transaction
+            await getConnection().transaction(async (tm)=>{
+                await tm.query(`
+                    insert into updoot ("userId", "postId", value)
+                    values ($1, $2, $3)
+                `, [userId, postId, realValue]); // can be done directly. be consistent irl
+                await tm.query(`
+                    update post
+                    set points = points + $1
+                    where id = $2
+                `, [realValue, postId]);
+            })
+        }
         // await Updoot.insert({
         //     userId,
         //     postId,
         //     value: realValue
-        // }); // added to the raw sql so that if one of the two fails, all fails
-
+        // }); // added to the raw sql so that if one of the two fails, all fails (for reference)
         // sometimes you can write your own sql
-        await getConnection().query(`
-            START TRANSACTION;
-            
-            insert into updoot ("userId", "postId", value)
-            values (${userId}, ${postId}, ${realValue});
-            
-            update post
-            set points = points + ${realValue}
-            where id = ${postId};
-            
-            COMMIT;
-        `); // add params directly because they are integers
+
+        // can add params directly because they are integers
         // doing it like this does not convert the sql to a prepared statement
 
         return true
@@ -79,14 +104,21 @@ export class PostResolver {
     @Query(() => PaginatedPosts)
     async posts(
         @Arg("limit", () => Int) limit: number,
-        @Arg("cursor", () => String, {nullable: true}) cursor: string | null
+        @Arg("cursor", () => String, {nullable: true}) cursor: string | null,
+        @Ctx() {req} : MyContext
     ): Promise<PaginatedPosts> {
         const realLimit = Math.min(50, limit);
         const realLimitPlusOne = realLimit + 1; // +1 to check if there are more posts
 
         const replacements: any[] = [realLimitPlusOne];
 
-        if (cursor) replacements.push(new Date(parseInt(cursor)));
+        if (req.session.userId) replacements.push(req.session.userId);
+
+        let cursorIdx = 3;
+        if (cursor) {
+            replacements.push(new Date(parseInt(cursor)));
+            cursorIdx = replacements.length;
+        };
 
         // json_build_object lets reshape data into an object - which is what our gql expects for the creator
         // because otherwise we get all the items on a top level
@@ -98,10 +130,13 @@ export class PostResolver {
                     'email', u.email,
                     'createdAt', u."createdAt",
                     'updatedAt', u."updatedAt"
-                ) creator
+                ) creator,
+                ${req.session.userId 
+                    ? '(select value from updoot where "userId" = $2 and "postId" = p.id) "voteStatus"' 
+                    : 'null as "voteStatus"'}
             from post p
             inner join public.user u on u.id = p."creatorId"
-            ${cursor ? `where p."createdAt" < $2` : ''}
+            ${cursor ? `where p."createdAt" < $${cursorIdx}` : ''}
             order by p."createdAt" DESC
             limit $1
         `, replacements);
@@ -133,8 +168,8 @@ export class PostResolver {
 
 
     @Query(() => Post, {nullable: true})
-    post(@Arg("id") id: number): Promise<Post | undefined> {
-        return Post.findOne(id);
+    post(@Arg("id", ()=>Int) id: number): Promise<Post | undefined> {
+        return Post.findOne(id, {relations: ['creator']});
     }
 
     @Mutation(() => Post)
@@ -166,8 +201,23 @@ export class PostResolver {
     }
 
     @Mutation(() => Boolean)
-    async deletePost(@Arg("id") id: number): Promise<boolean> {
-        await Post.delete(id);
+    @UseMiddleware(isAuth)
+    async deletePost(@Arg("id", ()=>Int) id: number, @Ctx() {req}: MyContext): Promise<boolean> {
+        // not cascade way (either or is fine and depends on different situations)
+        // const post = await Post.findOne(id);
+        // if (!post) return false;
+        // if (post.creatorId !== req.session.userId) {
+        //     throw new Error('not authorized')
+        // }
+        // // we need to delete the post's upvotes from the updoot table because otherwise psql wont allow to delete the post
+        // await Updoot.delete({postId: id});
+        // // default id is given as Float even tho we specify a number with ts. with ()=>Int we make it an Int
+        // // you can only delete posts that you own
+        // await Post.delete({id, creatorId: req.session.userId});
+
+
+        await Post.delete({id, creatorId: req.session.userId});
+
         return true;
     }
 }
