@@ -13,4 +13,5 @@ Notes:
 
  - create a postgres db called my-reddit (or change the name in the index to what you need)
  - make sure to create a .env with the db's password
+ - `npm run watch` to create a dist folder (make sure the command below points to the correct location inside dist)
  - `npm run dev`
